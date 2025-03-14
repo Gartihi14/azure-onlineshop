@@ -1,16 +1,22 @@
 {
-  "name": "",
+  "name": "sms-function",
   "version": "1.0.0",
-  "description": "",
   "main": "src/functions/*.js",
   "scripts": {
     "start": "func start",
     "test": "echo \"No tests yet...\""
   },
   "dependencies": {
-    "@azure/functions": "^4.0.0"
+    "@azure/functions": "^4.0.0",
+    "@azure/identity": "^4.8.0",
+    "@azure/keyvault-secrets": "^4.9.0",
+    "twilio": "^5.5.0"
   },
   "devDependencies": {
     "azure-functions-core-tools": "^4.x"
-  }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }
