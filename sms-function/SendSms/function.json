@@ -13,5 +13,6 @@
       "name": "res"
     }
   ],
-  "scriptFile": "index.js"
+  "scriptFile": "index.js",
+  "entryPoint": "main"
 }

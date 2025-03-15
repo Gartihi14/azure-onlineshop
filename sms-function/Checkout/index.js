@@ -18,9 +18,9 @@ module.exports = async function (context, req) {
 
         context.log(`📦 API-Call zu AWS /inventory für Produkt ${productId}`);
 
-        // Inventory API Call
-        const inventoryResponse = await axios.post("http://10.0.2.156:8000/inventory", {
-            productId: productId
+        // Inventory API Call (GET)
+        const inventoryResponse = await axios.get("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/inventory", {
+            params: { productId: productId }
         });
 
         const availableQuantity = inventoryResponse.data.available;
@@ -38,7 +38,7 @@ module.exports = async function (context, req) {
         context.log(`🛒 API-Call zu AWS /checkout für Produkt ${productId} mit Menge ${quantity}`);
 
         // Checkout API Call
-        const checkoutResponse = await axios.post("http://<private-ip-oder-dns>/checkout", {
+        const checkoutResponse = await axios.post("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/checkout", {
             productId: productId,
             quantity: quantity
         });
