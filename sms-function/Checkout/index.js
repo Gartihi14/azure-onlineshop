@@ -2,6 +2,18 @@ const { QueueServiceClient } = require('@azure/storage-queue');
 const axios = require('axios');
 
 module.exports = async function (context, req) {
+    if (req.method === "OPTIONS") {
+        context.res = {
+            status: 204,
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, x-functions-key",
+                "Access-Control-Max-Age": "86400" // 24 Stunden Cache
+            }
+        };
+        return;
+    }
     context.log("🚀 Checkout-Funktion gestartet.");
 
     try {
