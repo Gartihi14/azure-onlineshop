@@ -1,23 +1,9 @@
 const { QueueServiceClient } = require('@azure/storage-queue');
 const axios = require('axios');
+const twilio = require('twilio');
 
 module.exports = async function (context, req) {
     context.log("🚀 Checkout-Funktion gestartet.");
-
-    // CORS Handling
-    if (req.method === "OPTIONS") {
-        context.res = {
-            status: 200,
-            headers: {
-                "Access-Control-Allow-Origin": process.env.CORS_ALLOWED_ORIGIN,
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, x-functions-key",
-                "Access-Control-Max-Age": "86400"
-            },
-            body: ""
-        };
-        return;
-    }
 
     try {
         const { productId, quantity } = req.body;
@@ -33,7 +19,7 @@ module.exports = async function (context, req) {
 
         context.log(`📦 API-Call zu AWS /inventory für Produkt ${productId}`);
 
-        const inventoryResponse = await axios.get("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/inventory", {
+        const inventoryResponse = await axios.get(`http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/inventory`, {
             params: { productId }
         });
 
@@ -56,8 +42,10 @@ module.exports = async function (context, req) {
             quantity
         });
 
-        context.log(`✅ Bestellung erfolgreich. Verbleibender Lagerstand: ${checkoutResponse.data.remaining_stock}`);
+        const remainingStock = checkoutResponse.data.remaining_stock;
+        context.log(`✅ Bestellung erfolgreich. Verbleibender Lagerstand: ${remainingStock}`);
 
+        // Nachricht zur Azure Storage Queue hinzufügen
         const queueServiceClient = QueueServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
         const queueClient = queueServiceClient.getQueueClient(process.env.AZURE_QUEUE_NAME);
 
@@ -65,15 +53,21 @@ module.exports = async function (context, req) {
             Buffer.from(JSON.stringify({ productId, quantity })).toString('base64')
         );
 
+        context.log(`📩 Nachricht zur Queue hinzugefügt.`);
+
+        // SMS-Versand mit Twilio
+        const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+        const message = await client.messages.create({
+            body: `Bestellung erfolgreich: Produkt ${productId}, Menge ${quantity}`,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: process.env.TWILIO_RECIPIENT_NUMBER
+        });
+
+        context.log(`📱 SMS versendet. SID: ${message.sid}`);
+
         context.res = {
             status: 200,
-            headers: {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": process.env.CORS_ALLOWED_ORIGIN
-            },
-            body: JSON.stringify({
-                message: "Bestellung erfolgreich und Nachricht zur Queue hinzugefügt!"
-            })
+            body: "Bestellung erfolgreich! SMS wurde gesendet."
         };
 
     } catch (error) {
