@@ -4,23 +4,24 @@ const axios = require('axios');
 module.exports = async function (context, req) {
     context.log("🚀 Checkout-Funktion gestartet.");
 
-    // CORS Preflight Handling
-    if (req.method === 'OPTIONS') {
+    // CORS Handling
+    if (req.method === "OPTIONS") {
         context.res = {
             status: 200,
             headers: {
-                "Access-Control-Allow-Origin": "https://onlineshopstorage.z6.web.core.windows.net",
+                "Access-Control-Allow-Origin": process.env.CORS_ALLOWED_ORIGIN,
                 "Access-Control-Allow-Methods": "POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type, x-functions-key",
                 "Access-Control-Max-Age": "86400"
-            }
+            },
+            body: ""
         };
         return;
     }
 
     try {
         const { productId, quantity } = req.body;
-        
+
         if (!productId || !quantity) {
             context.log.error("❌ Fehler: productId oder quantity fehlen im Request.");
             context.res = {
@@ -32,7 +33,6 @@ module.exports = async function (context, req) {
 
         context.log(`📦 API-Call zu AWS /inventory für Produkt ${productId}`);
 
-        // Inventory API Call
         const inventoryResponse = await axios.get("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/inventory", {
             params: { productId }
         });
@@ -51,17 +51,12 @@ module.exports = async function (context, req) {
 
         context.log(`🛒 API-Call zu AWS /checkout für Produkt ${productId} mit Menge ${quantity}`);
 
-        // Checkout API Call
         const checkoutResponse = await axios.post("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/checkout", {
-            productId: productId,
-            quantity: quantity
+            productId,
+            quantity
         });
 
-        const remainingStock = checkoutResponse.data.remaining_stock;
-        context.log(`✅ Bestellung erfolgreich. Verbleibender Lagerstand: ${remainingStock}`);
-
-        // Nachricht zur Azure Storage Queue hinzufügen
-        context.log(`📩 Nachricht zur Queue hinzufügen: Produkt ${productId}, Menge ${quantity}`);
+        context.log(`✅ Bestellung erfolgreich. Verbleibender Lagerstand: ${checkoutResponse.data.remaining_stock}`);
 
         const queueServiceClient = QueueServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
         const queueClient = queueServiceClient.getQueueClient(process.env.AZURE_QUEUE_NAME);
@@ -72,10 +67,13 @@ module.exports = async function (context, req) {
 
         context.res = {
             status: 200,
-            body: "Bestellung erfolgreich und Nachricht zur Queue hinzugefügt!",
             headers: {
-                "Access-Control-Allow-Origin": "https://onlineshopstorage.z6.web.core.windows.net"
-            }
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": process.env.CORS_ALLOWED_ORIGIN
+            },
+            body: JSON.stringify({
+                message: "Bestellung erfolgreich und Nachricht zur Queue hinzugefügt!"
+            })
         };
 
     } catch (error) {
@@ -83,10 +81,7 @@ module.exports = async function (context, req) {
         context.log.error("📄 Stack Trace:", error.stack);
         context.res = {
             status: 500,
-            body: `Interner Fehler: ${error.message}`,
-            headers: {
-                "Access-Control-Allow-Origin": "https://onlineshopstorage.z6.web.core.windows.net"
-            }
+            body: `Interner Fehler: ${error.message}`
         };
     }
 };
