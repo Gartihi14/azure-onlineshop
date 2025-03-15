@@ -2,19 +2,21 @@ const { QueueServiceClient } = require('@azure/storage-queue');
 const axios = require('axios');
 
 module.exports = async function (context, req) {
-    if (req.method === "OPTIONS") {
+    context.log("🚀 Checkout-Funktion gestartet.");
+
+    // CORS Preflight Handling
+    if (req.method === 'OPTIONS') {
         context.res = {
-            status: 204,
+            status: 200,
             headers: {
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": "https://onlineshopstorage.z6.web.core.windows.net",
                 "Access-Control-Allow-Methods": "POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type, x-functions-key",
-                "Access-Control-Max-Age": "86400" // 24 Stunden Cache
+                "Access-Control-Max-Age": "86400"
             }
         };
         return;
     }
-    context.log("🚀 Checkout-Funktion gestartet.");
 
     try {
         const { productId, quantity } = req.body;
@@ -30,9 +32,9 @@ module.exports = async function (context, req) {
 
         context.log(`📦 API-Call zu AWS /inventory für Produkt ${productId}`);
 
-        // Inventory API Call (GET)
+        // Inventory API Call
         const inventoryResponse = await axios.get("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/inventory", {
-            params: { productId: productId }
+            params: { productId }
         });
 
         const availableQuantity = inventoryResponse.data.available;
@@ -70,7 +72,10 @@ module.exports = async function (context, req) {
 
         context.res = {
             status: 200,
-            body: "Bestellung erfolgreich und Nachricht zur Queue hinzugefügt!"
+            body: "Bestellung erfolgreich und Nachricht zur Queue hinzugefügt!",
+            headers: {
+                "Access-Control-Allow-Origin": "https://onlineshopstorage.z6.web.core.windows.net"
+            }
         };
 
     } catch (error) {
@@ -78,7 +83,10 @@ module.exports = async function (context, req) {
         context.log.error("📄 Stack Trace:", error.stack);
         context.res = {
             status: 500,
-            body: `Interner Fehler: ${error.message}`
+            body: `Interner Fehler: ${error.message}`,
+            headers: {
+                "Access-Control-Allow-Origin": "https://onlineshopstorage.z6.web.core.windows.net"
+            }
         };
     }
 };
