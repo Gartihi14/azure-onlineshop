@@ -12,15 +12,16 @@ module.exports = async function (context, req) {
             context.log.error("❌ Fehler: productId oder quantity fehlen im Request.");
             context.res = {
                 status: 400,
-                body: "productId und quantity müssen angegeben werden."
+                body: { message: "productId und quantity müssen angegeben werden." }
             };
             return;
         }
 
         context.log(`📦 API-Call zu AWS /inventory für Produkt ${productId}`);
 
-        const inventoryResponse = await axios.get(`http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/inventory`, {
-            params: { productId }
+        // Inventory API Call (GET)
+        const inventoryResponse = await axios.get("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/inventory", {
+            params: { productId: productId }
         });
 
         const availableQuantity = inventoryResponse.data.available;
@@ -30,22 +31,24 @@ module.exports = async function (context, req) {
             context.log.error(`❌ Lagerbestand zu niedrig für Produkt ${productId}.`);
             context.res = {
                 status: 400,
-                body: `Lagerbestand zu niedrig für Produkt ${productId}.`
+                body: { message: `Lagerbestand zu niedrig für Produkt ${productId}.` }
             };
             return;
         }
 
         context.log(`🛒 API-Call zu AWS /checkout für Produkt ${productId} mit Menge ${quantity}`);
 
+        // Checkout API Call (POST)
         const checkoutResponse = await axios.post("http://internal-loadbalancer-main-cluster-1966805206.eu-central-1.elb.amazonaws.com:8000/checkout", {
-            productId,
-            quantity
+            productId: productId,
+            quantity: quantity
         });
 
         const remainingStock = checkoutResponse.data.remaining_stock;
         context.log(`✅ Bestellung erfolgreich. Verbleibender Lagerstand: ${remainingStock}`);
 
         // Nachricht zur Azure Storage Queue hinzufügen
+        context.log(`📩 Nachricht zur Queue hinzufügen: Produkt ${productId}, Menge ${quantity}`);
         const queueServiceClient = QueueServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
         const queueClient = queueServiceClient.getQueueClient(process.env.AZURE_QUEUE_NAME);
 
@@ -53,21 +56,22 @@ module.exports = async function (context, req) {
             Buffer.from(JSON.stringify({ productId, quantity })).toString('base64')
         );
 
-        context.log(`📩 Nachricht zur Queue hinzugefügt.`);
-
         // SMS-Versand mit Twilio
+        context.log("📲 Sende Bestellbestätigungs-SMS...");
         const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-        const message = await client.messages.create({
-            body: `Bestellung erfolgreich: Produkt ${productId}, Menge ${quantity}`,
+        
+        await client.messages.create({
+            body: `Ihre Bestellung für Produkt ${productId} (Menge: ${quantity}) war erfolgreich.`,
             from: process.env.TWILIO_PHONE_NUMBER,
-            to: process.env.TWILIO_RECIPIENT_NUMBER
+            to: "+4369910160940" // Zielnummer anpassen
         });
 
-        context.log(`📱 SMS versendet. SID: ${message.sid}`);
+        context.log("✅ SMS erfolgreich gesendet!");
 
+        // Erfolgreiche API-Antwort
         context.res = {
             status: 200,
-            body: "Bestellung erfolgreich! SMS wurde gesendet."
+            body: { message: "Bestellung erfolgreich, Nachricht zur Queue hinzugefügt und SMS versendet!" }
         };
 
     } catch (error) {
@@ -75,7 +79,7 @@ module.exports = async function (context, req) {
         context.log.error("📄 Stack Trace:", error.stack);
         context.res = {
             status: 500,
-            body: `Interner Fehler: ${error.message}`
+            body: { message: `Interner Fehler: ${error.message}` }
         };
     }
 };
